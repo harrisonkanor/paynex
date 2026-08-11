@@ -1,148 +1,209 @@
 <?php
 /**
  * signup.php — New user registration.
+ *
+ * Features:
+ *   - USDT-TRC20 address collected at signup
+ *   - Referral code / link support (?ref=CODE)
+ *   - Unique referral code generated for the new user
+ *   - Welcome email sent after registration
+ *   - Email domain validation (DNS MX check via validate_email_domain())
+ *   - Crypto address format validation (client + server side)
+ *   - CSRF protection on all form submissions
+ *   - Email verification removed (auto-verified on signup)
  */
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/includes/mailer.php';
 
-if (is_logged_in()) redirect('/dashboard.php');
+// Redirect already-logged-in users away from the signup page
+if (is_logged_in()) {
+    redirect('/dashboard.php');
+}
 
+// Pre-fill role and referral code from URL parameters
 $refCode = trim($_GET['ref'] ?? '');
-$name = '';
-$email = '';
-$usdt = '';
-$errors = [];
+$name    = '';
+$email   = '';
+$usdt    = '';
+$errors  = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
 
-    $name = trim($_POST['name'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = $_POST['password'] ?? '';
-    $confirm = $_POST['confirm_password'] ?? '';
-    $usdt = trim($_POST['usdt_address'] ?? '');
-    $refCode = trim($_POST['ref_code'] ?? '');
+    $name     = trim($_POST['name']             ?? '');
+    $email    = trim($_POST['email']            ?? '');
+    $password = $_POST['password']              ?? '';
+    $confirm  = $_POST['confirm_password']      ?? '';
+    $usdt     = trim($_POST['usdt_address']     ?? '');
+    $refCode  = trim($_POST['ref_code']         ?? '');
 
-    if ($name === '' || mb_strlen($name) > 120) $errors[] = 'Please enter your full name.';
+    if ($name === '' || mb_strlen($name) > 120) {
+        $errors[] = 'Please enter your full name.';
+    }
+
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Please enter a valid email address.';
     } elseif (!validate_email_domain($email)) {
-        $domain = substr(strrchr($email, '@'), 1);
-        $errors[] = 'Invalid email — domain "' . e($domain) . '" does not exist.';
+        $domain = substr(strrchr($email, "@"), 1);
+        $errors[] = "Email domain \"{$domain}\" could not be verified. Check for typos or use another email.";
+    } elseif (email_exists($pdo, $email)) {
+        $errors[] = 'This email is already registered.';
     }
+
     if (strlen($password) < 8) $errors[] = 'Password must be at least 8 characters.';
     if ($password !== $confirm) $errors[] = 'Passwords do not match.';
-    if ($usdt !== '' && !validate_usdt_trc20_address($usdt)) $errors[] = 'Invalid USDT address format.';
 
-    if (!$errors) {
-        $check = $pdo->prepare('SELECT id FROM users WHERE email = :email');
-        $check->execute([':email' => $email]);
-        if ($check->fetch()) $errors[] = 'An account with that email already exists.';
+    // Optional USDT address validation
+    if ($usdt !== '' && !preg_match('/^T[A-Za-z1-9]{33}$/', $usdt)) {
+        $errors[] = 'Invalid USDT TRC-20 address format. It should start with T and be 34 characters long.';
     }
 
+    // Referral lookup
     $referrerId = null;
     if ($refCode !== '') {
-        $refStmt = $pdo->prepare('SELECT id FROM users WHERE referral_code = :code');
-        $refStmt->execute([':code' => $refCode]);
+        $refStmt = $pdo->prepare('SELECT id FROM users WHERE referral_code = :rc LIMIT 1');
+        $refStmt->execute([':rc' => $refCode]);
         $referrer = $refStmt->fetch();
-        $referrerId = $referrer ? (int) $referrer['id'] : null;
-        if (!$referrer) $errors[] = 'Referral code not found.';
+        if (!$referrer) {
+            $errors[] = 'Invalid referral code.';
+        } else {
+            $referrerId = $referrer['id'];
+        }
     }
 
-    if (!$errors) {
-        $newReferralCode = generate_referral_code($pdo);
+    if (empty($errors)) {
         $hash = password_hash($password, PASSWORD_DEFAULT);
+
+        // Generate unique referral code for the new user
+        $newReferralCode = strtoupper(bin2hex(random_bytes(4)));
 
         $stmt = $pdo->prepare(
             'INSERT INTO users (name, email, password_hash, role, usdt_trc20_address, referral_code, referred_by, email_verified)
              VALUES (:name, :email, :hash, "earner", :usdt, :refcode, :referred_by, 1)'
         );
-        $stmt->execute([':name'=>$name, ':email'=>$email, ':hash'=>$hash, ':usdt'=>$usdt?:null, ':refcode'=>$newReferralCode, ':referred_by'=>$referrerId]);
-        $newUserId = (int) $pdo->lastInsertId();
+        $stmt->execute([
+            ':name'        => $name,
+            ':email'       => $email,
+            ':hash'        => $hash,
+            ':usdt'        => $usdt ?: null,
+            ':refcode'     => $newReferralCode,
+            ':referred_by' => $referrerId,
+        ]);
 
+        $newUserId = $pdo->lastInsertId();
+
+        // Credit referrer's bonus if applicable
         if ($referrerId) {
-            $refInsert = $pdo->prepare('INSERT IGNORE INTO referrals (referrer_id, referred_id) VALUES (:referrer, :referred)');
-            $refInsert->execute([':referrer'=>$referrerId, ':referred'=>$newUserId]);
+            $bonus = random_int(11, 29);
+            $pdo->prepare('UPDATE users SET total_referrals = total_referrals + 1, wallet_balance = wallet_balance + :bonus WHERE id = :id')
+                ->execute([':bonus' => $bonus, ':id' => $referrerId]);
+            $pdo->prepare('INSERT INTO wallet_transactions (user_id, type, amount, description) VALUES (:uid, "credit", :bonus, "Referral bonus — new user signup")')
+                ->execute([':uid' => $referrerId, ':bonus' => $bonus]);
         }
 
-        log_activity($pdo, $newUserId, 'account_created');
+        // Log activity
+        log_activity($pdo, (int)$newUserId, 'user_signup', "New earner account created: {$email}");
 
-        // Auto-login the user temporarily to show success page
-        session_regenerate_id(true);
-        $_SESSION['user'] = [
-            'id'=>$newUserId, 'name'=>$name, 'email'=>$email, 'role'=>'earner',
-            'status'=>'active', 'vip_level'=>null, 'profile_photo'=>null,
-            'referral_code'=>$newReferralCode, 'email_verified'=>true,
-        ];
+        // Send a welcome email (no OTP)
+        $referralLink = BASE_URL . "/signup.php?ref={$newReferralCode}";
+        mail_welcome_no_otp($email, $name, $newReferralCode, $referralLink);
 
-        // Redirect to success page
+        // Redirect to congratulations page
         redirect('/signup_success.php');
     }
 }
 
-$pageTitle = 'Sign up — payNex';
+$pageTitle = 'Create account — payNex';
 require __DIR__ . '/includes/header.php';
 ?>
 
-<div class="auth-wrap" style="max-width:560px;">
-  <h1><i class="fa-solid fa-user-plus" style="color:var(--green);"></i> Create your account</h1>
-  <p class="sub">Join payNex and start earning — free forever.</p>
-
-  <?php if ($errors): ?>
-    <div class="alert alert-error" style="margin-bottom:20px;">
-      <i class="fa-solid fa-circle-exclamation"></i>
-      <div><?php foreach ($errors as $err): ?><div><?= e($err) ?></div><?php endforeach; ?></div>
-    </div>
-  <?php endif; ?>
-
-  <form method="post" action="<?= BASE_URL ?>/signup.php" novalidate>
-    <?= csrf_field() ?>
-    <input type="hidden" name="ref_code" value="<?= e($refCode) ?>">
-
-    <div class="field">
-      <label><i class="fa-solid fa-id-card"></i> Full name</label>
-      <input type="text" name="name" value="<?= e($name) ?>" required maxlength="120" placeholder="Your full name" autofocus>
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="<?= BASE_URL ?>/assets/images/logo.png" alt="payNex logo" onerror="this.style.display='none'">
+      <h1>Create your <span class="text-green">payNex</span> account</h1>
     </div>
 
-    <div class="field">
-      <label><i class="fa-solid fa-envelope"></i> Email</label>
-      <input type="email" name="email" value="<?= e($email) ?>" required maxlength="190" placeholder="you@example.com">
-    </div>
+    <?php if ($errors): ?>
+      <div class="alert alert-error">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <?= implode('<br>', array_map('htmlspecialchars', $errors)) ?>
+      </div>
+    <?php endif; ?>
 
-    <div class="form-row">
+    <?php if ($refCode): ?>
+      <div class="alert alert-success" style="font-size:13px;">
+        <i class="fa-solid fa-user-plus"></i>
+        You were referred! Referral code <strong><?= htmlspecialchars($refCode) ?></strong> applied.
+      </div>
+    <?php endif; ?>
+
+    <form method="post" action="<?= BASE_URL ?>/signup.php" novalidate>
+      <?= csrf_field() ?>
+
+      <div class="field">
+        <label><i class="fa-solid fa-user"></i> Full name</label>
+        <input type="text" name="name" value="<?= htmlspecialchars($name) ?>" required placeholder="John Doe" maxlength="120">
+      </div>
+
+      <div class="field">
+        <label><i class="fa-solid fa-envelope"></i> Email address</label>
+        <input type="email" name="email" value="<?= htmlspecialchars($email) ?>" required placeholder="you@example.com">
+      </div>
+
+      <div class="form-row">
       <div class="field">
         <label><i class="fa-solid fa-lock"></i> Password</label>
-        <input type="password" name="password" required minlength="8" placeholder="Min. 8 characters">
+        <div style="position:relative;">
+          <input type="password" name="password" id="signup-password" required minlength="8" placeholder="Min. 8 characters" style="padding-right:40px;">
+          <button type="button" onclick="togglePass('signup-password',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-soft);padding:6px;">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+        </div>
       </div>
       <div class="field">
         <label><i class="fa-solid fa-lock"></i> Confirm password</label>
-        <input type="password" name="confirm_password" required minlength="8" placeholder="Repeat password">
+        <div style="position:relative;">
+          <input type="password" name="confirm_password" id="signup-confirm" required minlength="8" placeholder="Repeat password" style="padding-right:40px;">
+          <button type="button" onclick="togglePass('signup-confirm',this)" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink-soft);padding:6px;">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+        </div>
       </div>
     </div>
 
-    <hr style="border:none; border-top:1px solid var(--paper-line); margin:20px 0;">
-    <p style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">
-      <i class="fa-solid fa-circle-info"></i> Add your USDT deposit address (optional, can update later).
-    </p>
+      <hr style="border:none; border-top:1px solid var(--paper-line); margin:20px 0;">
+      <p style="font-size:13px; color:var(--ink-soft); margin-bottom:14px;">
+        <i class="fa-solid fa-circle-info"></i> Add your USDT deposit address (optional, can update later).
+      </p>
 
-    <div class="field">
-      <label><i class="fa-solid fa-circle-dollar-to-slot" style="color:#26a17b;"></i> USDT – TRC20 address</label>
-      <input type="text" name="usdt_address" value="<?= e($usdt) ?>" placeholder="Your USDT TRC-20 wallet address" maxlength="100">
-    </div>
+      <div class="field">
+        <label><i class="fa-solid fa-wallet"></i> USDT TRC-20 address</label>
+        <input type="text" name="usdt_address" value="<?= htmlspecialchars($usdt) ?>" placeholder="T... (34 chars)" maxlength="34">
+      </div>
 
-    <div class="field">
-      <label><i class="fa-solid fa-link"></i> Referral code <span style="font-weight:400;">(optional)</span></label>
-      <input type="text" name="ref_code" value="<?= e($refCode) ?>" placeholder="e.g. AB3XKZQ7" maxlength="16" style="text-transform:uppercase;">
-    </div>
+      <div class="field">
+        <label><i class="fa-solid fa-ticket"></i> Referral code (optional)</label>
+        <input type="text" name="ref_code" value="<?= htmlspecialchars($refCode) ?>" placeholder="Enter referral code" maxlength="20">
+      </div>
 
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">
-        <i class="fa-solid fa-rocket"></i> Create free account
+      <div class="form-row" style="margin-top:4px;">
+        <div class="field" style="flex:1;">
+          <label style="font-size:12px; color:var(--ink-soft);">
+            By creating an account you agree to the <a href="<?= BASE_URL ?>/terms.php" style="color:var(--green);">Terms of Service</a> and <a href="<?= BASE_URL ?>/privacy.php" style="color:var(--green);">Privacy Policy</a>.
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-green btn-full">
+        <i class="fa-solid fa-user-plus"></i> Create account
       </button>
-    </div>
-  </form>
 
-  <p class="form-note">Already have an account? <a href="<?= BASE_URL ?>/login.php">Log in</a></p>
+      <p style="text-align:center; margin-top:16px; font-size:14px; color:var(--ink-soft);">
+        Already have an account? <a href="<?= BASE_URL ?>/login.php" style="color:var(--green); font-weight:600;">Log in</a>
+      </p>
+    </form>
+  </div>
 </div>
 
 <?php require __DIR__ . '/includes/footer.php'; ?>

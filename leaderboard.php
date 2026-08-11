@@ -389,7 +389,7 @@ require __DIR__ . '/includes/header.php';
       </div>
       <div class="table-footer-note">
         <i class="fa-solid fa-circle-info"></i>
-        Rankings are by <strong>total referral bonus earned</strong>, not just headcount. Only referred friends who <strong>activate a VIP plan</strong> count toward your score. Refer friends to higher VIP tiers (VIP 3 = $5 bonus) to climb faster! Top 10 each win <strong>$<?= number_format($prizePerPerson) ?></strong> on Monday.
+        Rankings are by <strong>total referral bonus earned</strong>, not just headcount. Only referred friends who <strong>activate a VIP plan</strong> count toward your score. Refer friends to higher VIP tiers (VIP 3 = $4 bonus) to climb faster! Top 10 each win <strong>$<?= number_format($prizePerPerson) ?></strong> on Monday.
       </div>
     <?php endif; ?>
   </div>

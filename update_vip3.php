@@ -13,12 +13,14 @@ try {
     
     // 1. Update VIP 3 plan bonus from $5 to $4
     echo "1. Updating VIP 3 plan bonus...\n";
-    $pdo->exec("UPDATE vip_plans SET referral_bonus = 4.00 WHERE level = 3");
+    $stmt = $pdo->prepare("UPDATE vip_plans SET referral_bonus = 4.00 WHERE level = 3");
+    $stmt->execute();
     echo "   VIP 3 bonus changed from \$5.00 to \$4.00\n\n";
     
     // 2. Update all referrals for VIP 3 referrers
     echo "2. Updating VIP 3 referrals...\n";
-    $pdo->exec("UPDATE referrals r JOIN users u ON u.id = r.referrer_id SET r.bonus_amount = 4.00 WHERE u.vip_level = 3");
+    $stmt = $pdo->prepare("UPDATE referrals r JOIN users u ON u.id = r.referrer_id SET r.bonus_amount = 4.00 WHERE u.vip_level = 3");
+    $stmt->execute();
     echo "   Updated VIP 3 referrals\n\n";
     
     // 3. Update user balances for VIP 3 users

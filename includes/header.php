@@ -11,6 +11,9 @@ if (!isset($pdo)) {
 }
 require_once __DIR__ . '/security_headers.php';
 $user = current_user();
+
+// Determine logo link based on login status
+$logoLink = $user ? BASE_URL . '/dashboard.php' : BASE_URL . '/index.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -66,7 +69,7 @@ $user = current_user();
   <div class="nav-inner">
 
     <!-- Logo / brand -->
-    <a href="<?= BASE_URL ?>/index.php" class="brand">
+    <a href="<?= $logoLink ?>" class="brand">
       <img src="<?= BASE_URL ?>/assets/img/logo.png" alt="payNex logo">
       <span>PayNex</span>
     </a>

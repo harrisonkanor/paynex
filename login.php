@@ -77,12 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 redirect('/admin/index.php');
             }
 
-            // Check email verification
-            if (!$user['email_verified']) {
-                flash('info', 'Please verify your email address to access all features.');
-                redirect('/verify_email.php');
-            }
-
+            // Redirect to dashboard (email verification removed)
             redirect('/dashboard.php');
         }
     }

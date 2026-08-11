@@ -6,11 +6,11 @@
  *   - USDT-TRC20 address collected at signup
  *   - Referral code / link support (?ref=CODE)
  *   - Unique referral code generated for the new user
- *   - Combined welcome + OTP verification email sent after registration
+ *   - Welcome email sent after registration
  *   - Email domain validation (DNS MX check via validate_email_domain())
  *   - Crypto address format validation (client + server side)
- *   - Email verification OTP flow
  *   - CSRF protection on all form submissions
+ *   - Email verification removed (auto-verified on signup)
  */
 require_once __DIR__ . '/config/config.php';
 require_once __DIR__ . '/includes/mailer.php';
@@ -88,18 +88,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Generate a unique referral code for this new user
         $newReferralCode = generate_referral_code($pdo);
 
-        // Generate OTP verification code
-        $otpCode = generate_otp_code();
-
         // Hash password with bcrypt (secure by default in PHP 7+)
         $hash = password_hash($password, PASSWORD_DEFAULT);
 
         $stmt = $pdo->prepare(
             'INSERT INTO users
                (name, email, password_hash, role, usdt_trc20_address,
-                referral_code, referred_by, verification_code)
+                referral_code, referred_by, email_verified)
              VALUES
-               (:name, :email, :hash, "earner", :usdt, :refcode, :referred_by, :vcode)'
+               (:name, :email, :hash, "earner", :usdt, :refcode, :referred_by, 1)'
         );
         $stmt->execute([
             ':name'        => $name,
@@ -108,7 +105,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ':usdt'        => $usdt ?: null,
             ':refcode'     => $newReferralCode,
             ':referred_by' => $referrerId,
-            ':vcode'       => $otpCode,
         ]);
         $newUserId = (int) $pdo->lastInsertId();
 
@@ -124,11 +120,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Log the event to the auditable activity log
         log_activity($pdo, $newUserId, 'account_created');
 
-        // Send a single combined welcome + OTP email (reduces inbox clutter)
+        // Send a welcome email (no OTP)
         $referralLink = (isset($_SERVER['HTTPS']) ? 'https' : 'http')
                       . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost')
                       . BASE_URL . '/signup.php?ref=' . $newReferralCode;
-        mail_welcome_with_otp($email, $name, $newReferralCode, $referralLink, $otpCode);
+        
+        // Send welcome email (simple version without OTP)
+        $subject = 'Welcome to payNex!';
+        $message = "Hello $name,\n\n";
+        $message .= "Welcome to payNex! Your account has been created successfully.\n\n";
+        $message .= "Your referral code: $newReferralCode\n";
+        $message .= "Share this link to invite others: $referralLink\n\n";
+        $message .= "You can now log in and start earning!\n\n";
+        $message .= "Best regards,\nThe payNex Team";
+        
+        $headers = 'From: ' . MAIL_FROM_NAME . ' <' . MAIL_FROM_ADDRESS . "\r\n";
+        $headers .= 'Reply-To: ' . MAIL_FROM_ADDRESS . "\r\n";
+        $headers .= 'Content-Type: text/plain; charset=UTF-8\r\n';
+        
+        @mail($email, $subject, $message, $headers);
 
         // Auto-login the user
         session_regenerate_id(true);
@@ -141,11 +151,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'vip_level'         => null,
             'profile_photo'     => null,
             'referral_code'     => $newReferralCode,
-            'email_verified'    => false,
+            'email_verified'    => true,
         ];
 
-        flash('info', 'We sent a 6-digit verification code to your email. Please verify your account.');
-        redirect('/verify_email.php');
+        flash('success', 'Account created successfully! Welcome to payNex.');
+        redirect('/dashboard.php');
     }
 }
 
@@ -185,7 +195,6 @@ require __DIR__ . '/includes/header.php';
       <input type="email" name="email" value="<?= e($email) ?>" required maxlength="190"
              placeholder="you@example.com" class="email-input"
              data-validate-email="true">
-      <div class="input-hint">We'll send a verification code to this address.</div>
     </div>
 
     <div class="form-row">

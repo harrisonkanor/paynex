@@ -3,15 +3,15 @@
  * Database connection (PDO / MySQL)
  * -----------------------------------------------------------------
  * Supports Railway.app MySQL environment variables (MYSQLHOST, MYSQLPORT, etc.)
- * Falls back to local defaults when running locally.
+ * All credentials MUST come from environment variables for security.
  */
 
 // Support Railway.app MySQL environment variables
 $DB_HOST = getenv('MYSQLHOST') ?: '127.0.0.1';
 $DB_PORT = getenv('MYSQLPORT') ?: '3306';
 $DB_NAME = getenv('MYSQLDATABASE') ?: 'paynex';
-$DB_USER = getenv('MYSQLUSER') ?: 'paynex';
-$DB_PASS = getenv('MYSQLPASSWORD') ?: 'paynex1234';
+$DB_USER = getenv('MYSQLUSER') ?: 'root';
+$DB_PASS = getenv('MYSQLPASSWORD') ?: '';
 $DB_CHARSET = 'utf8mb4';
 
 // Keep constants for backward compatibility

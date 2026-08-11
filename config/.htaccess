@@ -1,0 +1,11 @@
+# Deny access to config directory
+Deny from all
+
+# Allow only specific files if needed
+<Files "config.php">
+    Deny from all
+</Files>
+
+<Files "db.php">
+    Deny from all
+</Files>

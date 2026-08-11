@@ -7,7 +7,8 @@
  *   $pageTitle — string, optional
  */
 if (!isset($pdo)) {
-    require_once __DIR__ . '/../config/config.php';
+    require_once __DIR__ . '/../config/config.php ';
+require_once __DIR__ . '/security_headers.php ';
 }
 $user = current_user();
 ?>

@@ -140,22 +140,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         @mail($email, $subject, $message, $headers);
 
-        // Auto-login the user
-        session_regenerate_id(true);
-        $_SESSION['user'] = [
-            'id'                => $newUserId,
-            'name'              => $name,
-            'email'             => $email,
-            'role'              => 'earner',
-            'status'            => 'active',
-            'vip_level'         => null,
-            'profile_photo'     => null,
-            'referral_code'     => $newReferralCode,
-            'email_verified'    => true,
-        ];
-
-        flash('success', 'Account created successfully! Welcome to payNex.');
-        redirect('/dashboard.php');
+        // Redirect to login page with success message
+        flash('success', 'Account created successfully! Please log in with your new account.');
+        redirect('/login.php');
     }
 }
 

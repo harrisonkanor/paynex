@@ -48,7 +48,7 @@ $stmt = $pdo->prepare(
        AND r.created_at < DATE_ADD(:we, INTERVAL 1 DAY)
      GROUP BY u.id
      ORDER BY bonus_earned DESC, referral_count DESC
-     LIMIT 10"
+     LIMIT 20"
 );
 $stmt->execute([':ws' => $weekStart . ' 00:00:00', ':we' => $weekEnd . ' 00:00:00']);
 $leaderboard = $stmt->fetchAll();
@@ -88,7 +88,7 @@ if ($prevCycle) {
          JOIN users u ON u.id = lp.user_id
          WHERE lp.cycle_id = :cid
          ORDER BY lp.rank_position ASC
-         LIMIT 10"
+         LIMIT 20"
     );
     $wStmt->execute([':cid' => $prevCycle['id']]);
     $prevWinners = $wStmt->fetchAll();
@@ -445,7 +445,7 @@ require __DIR__ . '/includes/header.php';
     <ol class="how-steps">
       <li><strong>Refer friends</strong> — Share your unique referral link. Each sign-up counts.</li>
       <li><strong>Climb the ranks</strong> — The more referrals you bring this week, the higher you climb.</li>
-      <li><strong>Top 10 win</strong> — At the end of each week (Sunday), the top 10 split the pool equally.</li>
+      <li><strong>Top 10 win</strong> — At the end of each week (Sunday), the top 20 each win $50.</li>
       <li><strong>Automatic payout</strong> — Prizes credited to wallets on Monday morning.</li>
     </ol>
   </div>

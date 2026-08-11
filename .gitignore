@@ -1,0 +1,25 @@
+# Railway deployment files
+deploy-railway.sh
+
+# Local development files
+*.log
+.env
+.env.local
+
+# uploads directory (user uploads)
+uploads/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+
+# Temporary files
+/tmp/

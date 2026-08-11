@@ -41,19 +41,24 @@ if ($lastSpin) {
     }
 }
 
-/* 16 segments — $3 removed, replaced with $0.15 */
-$segments = ['$1.00','$0.30','$0.15','$0.20','$1.00','$0.50','$0.10','$0.30','$0.20','$0.50','$0.10','$0.20','$0.30','$0.50','$0.20','$0.10'];
+/* 16 segments with their values */
+$segments = [1.00, 0.30, 0.15, 0.20, 1.00, 0.50, 0.10, 0.30, 0.20, 0.50, 0.10, 0.20, 0.30, 0.50, 0.20, 0.10];
+$segmentLabels = ['$1.00','$0.30','$0.15','$0.20','$1.00','$0.50','$0.10','$0.30','$0.20','$0.50','$0.10','$0.20','$0.30','$0.50','$0.20','$0.10'];
 
-/* Weighted result — odds independent of visual segments */
-$roll = random_int(1, 100);
+/* Weighted odds - higher values are less likely */
 $roll = random_int(1, 10000);
-if ($roll <= 1)      { $segIndex = 0;  $result = '$1.00';  $reward = 5.00; }
-elseif ($roll <= 100){ $segIndex = 4;  $result = '$1.00';  $reward = 1.00; }
-elseif ($roll <= 200){ $segIndex = 2;  $result = '$0.15';  $reward = 0.15; }
-elseif ($roll <= 2000){$segIndex = [5,9,13][random_int(0,2)]; $result = '$0.50';  $reward = 0.50; }
-elseif ($roll <= 4200){$segIndex = [1,7,12][random_int(0,2)]; $result = '$0.30';  $reward = 0.30; }
-elseif ($roll <= 7200){$segIndex = [3,8,11,14][random_int(0,3)]; $result = '$0.20';  $reward = 0.20; }
-else                { $segIndex = [6,10,15][random_int(0,2)]; $result = '$0.10';  $reward = 0.10; }
+
+if ($roll <= 1)      { $segIndex = 0;  }  // $1.00 - 0.01% chance
+elseif ($roll <= 100){ $segIndex = 4;  }  // $1.00 - 0.99% chance  
+elseif ($roll <= 200){ $segIndex = 2;  }  // $0.15 - 1% chance
+elseif ($roll <= 2000){$segIndex = [5,9,13][random_int(0,2)]; }  // $0.50 - 18% chance
+elseif ($roll <= 4200){$segIndex = [1,7,12][random_int(0,2)]; }  // $0.30 - 22% chance
+elseif ($roll <= 7200){$segIndex = [3,8,11,14][random_int(0,3)]; }  // $0.20 - 30% chance
+else                { $segIndex = [6,10,15][random_int(0,2)]; }  // $0.10 - 28% chance
+
+// Get the reward from the segment value (not the odds)
+$reward = $segments[$segIndex];
+$result = $segmentLabels[$segIndex];
 
 $pdo->beginTransaction();
 try {

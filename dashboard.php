@@ -55,20 +55,6 @@ $referralEarnings = (float) $refEarnStmt->fetchColumn();
 
 $depositUsdt = get_setting($pdo, 'deposit_wallet_usdt');
 
-// Check spin wheel availability
-$canSpin = false;
-$nextSpinAt = null;
-if ($vipPlan) {
-    $midnightToday = strtotime('today 00:00:00 UTC');
-    $midnightTomorrow = strtotime('tomorrow 00:00:00 UTC');
-    $lastSpin = $u['last_spin_at'] ?? null;
-    if (!$lastSpin || strtotime($lastSpin . ' UTC') < $midnightToday) {
-        $canSpin = true;
-    } else {
-        $nextSpinAt = $midnightTomorrow;
-    }
-}
-
 $pageTitle = 'Dashboard — payNex';
 require __DIR__ . '/includes/header.php';
 ?>
@@ -111,37 +97,6 @@ require __DIR__ . '/includes/header.php';
     <div class="stat-card"><div class="sc-icon"><i class="fa-solid fa-sack-dollar"></i></div><div class="num"><?= e(money($lifetimeEarned)) ?></div><div class="lbl">Lifetime earned</div></div>
     <div class="stat-card"><div class="sc-icon"><i class="fa-solid fa-users"></i></div><div class="num"><?= $totalReferrals ?></div><div class="lbl">Referrals</div></div>
   </div>
-
-  <!-- SPIN WHEEL SECTION -->
-  <?php if ($vipPlan): ?>
-  <div class="card" style="margin-bottom:20px;">
-    <div class="card-header">
-      <h2><i class="fa-solid fa-dharmachakra" style="color:var(--amber);"></i> Daily Spin the Wheel</h2>
-      <?php if ($canSpin): ?>
-        <span class="badge badge-active"><i class="fa-solid fa-bolt"></i> Ready to spin</span>
-      <?php else: ?>
-        <span data-spin-countdown="<?= $nextSpinAt ?>"></span>
-      <?php endif; ?>
-    </div>
-    <div class="wheel-wrap" style="text-align:center;padding:20px 0;">
-      <div style="position:relative;display:inline-block;">
-        <canvas id="dash-wheel-canvas" width="240" height="240" style="width:240px;height:240px;"></canvas>
-        <canvas id="dash-particle-canvas" width="240" height="240" style="position:absolute;top:0;left:0;width:240px;height:240px;pointer-events:none;"></canvas>
-        <canvas id="dash-confetti-canvas" width="240" height="240" style="position:absolute;top:0;left:0;width:240px;height:240px;pointer-events:none;"></canvas>
-      </div>
-      <div id="dash-wheel-result" class="wheel-result" style="margin-top:16px;font-size:18px;font-weight:600;min-height:28px;"></div>
-      <?php if ($canSpin): ?>
-        <button id="dash-spin-btn" class="btn btn-primary" style="margin-top:12px;">
-          <i class="fa-solid fa-rotate"></i> Spin now
-        </button>
-      <?php else: ?>
-        <button id="dash-spin-btn" class="btn btn-dark" disabled style="margin-top:12px;opacity:0.6;cursor:not-allowed;">
-          <i class="fa-solid fa-lock"></i> Spin locked
-        </button>
-      <?php endif; ?>
-    </div>
-  </div>
-  <?php endif; ?>
 
   <div class="two-col">
     <div>
@@ -190,7 +145,6 @@ require __DIR__ . '/includes/header.php';
   </div>
 </div>
 
-<script src="<?= BASE_URL ?>/assets/js/dash-spin.js"></script>
 <script>
 document.querySelectorAll('[data-expires]').forEach(function(el) {
   function tick() {

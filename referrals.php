@@ -3,7 +3,7 @@
  * referrals.php — Earner referral hub.
  *
  * Shows:
- *   - Unique referral link and referral code (copy-to-clipboard)
+ *   - Unique referral link and referral code (copy-to-clipboard) — VIP only
  *   - List of referred users with their VIP level and whether a bonus was paid
  *   - Total referral earnings
  *
@@ -11,11 +11,20 @@
  *   1. User A signs up with User B's code → referrals row created.
  *   2. User A activates a VIP plan (deposits) → admin confirms deposit.
  *   3. maybe_award_referral_bonus() in functions.php credits User B.
+ *
+ * ACCESS RESTRICTION: Only users with an active VIP plan can access their referral link.
  */
 require_once __DIR__ . '/config/config.php';
 require_login();
 
 $user = current_user();
+
+// Fetch user's VIP level from database
+$vipStmt = $pdo->prepare('SELECT vip_level FROM users WHERE id = :id');
+$vipStmt->execute([':id' => $user['id']]);
+$vipLevel = (int) $vipStmt->fetchColumn();
+
+$hasVip = $vipLevel > 0;
 
 /* ---------------------------------------------------------------
  * Generate the referral link from the current HTTP host
@@ -57,11 +66,39 @@ require __DIR__ . '/includes/header.php';
     <p>Share your link, earn bonuses when your referrals join a VIP plan.</p>
   </div>
 
+  <?php if (!$hasVip): ?>
   <!-- ============================================================
-       REFERRAL CODE + LINK
+       VIP REQUIRED NOTICE
+       ========================================================= -->
+  <div class="card" style="text-align:center; padding:48px 24px;">
+    <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--gold),#FFD700);display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;">
+      <i class="fa-solid fa-lock" style="font-size:32px;color:#fff;"></i>
+    </div>
+    <h2 style="margin-bottom:12px;"><i class="fa-solid fa-crown" style="color:var(--gold);"></i> VIP Plan Required</h2>
+    <p style="font-size:16px; color:var(--ink-soft); max-width:480px; margin:0 auto 24px;">
+      You need to activate a VIP plan to access your referral link and start earning referral bonuses.
+    </p>
+    <a href="<?= BASE_URL ?>/plans.php" class="btn btn-green" style="display:inline-flex; align-items:center; gap:8px; padding:14px 32px; font-size:16px;">
+      <i class="fa-solid fa-crown"></i> View VIP Plans
+    </a>
+    <p style="font-size:13px; color:var(--ink-soft); margin-top:16px;">
+      <i class="fa-solid fa-circle-info"></i> Plans start from just $10/month
+    </p>
+  </div>
+
+  <?php else: ?>
+  <!-- ============================================================
+       REFERRAL CODE + LINK (VIP users only)
        ========================================================= -->
   <div class="referral-box">
     <h3><i class="fa-solid fa-share-nodes"></i> Your referral details</h3>
+
+    <!-- VIP Badge -->
+    <div style="margin-bottom:16px;">
+      <span class="badge badge-vip<?= $vipLevel ?>" style="font-size:14px; padding:6px 12px;">
+        <i class="fa-solid fa-crown"></i> VIP <?= $vipLevel ?> Member
+      </span>
+    </div>
 
     <!-- Big referral code display -->
     <div style="margin-bottom:16px;">
@@ -105,6 +142,7 @@ require __DIR__ . '/includes/header.php';
       </div>
     </div>
   </div>
+  <?php endif; ?>
 
   <!-- ============================================================
        HOW THE REFERRAL BONUS WORKS
@@ -145,8 +183,12 @@ require __DIR__ . '/includes/header.php';
 
     <?php if (!$referrals): ?>
       <p class="text-muted">
-        You haven't referred anyone yet.
-        Share your link above to start earning bonuses!
+        <?php if (!$hasVip): ?>
+          Purchase a VIP plan to start referring friends and earning bonuses!
+        <?php else: ?>
+          You haven't referred anyone yet.
+          Share your link above to start earning bonuses!
+        <?php endif; ?>
       </p>
     <?php else: ?>
       <div class="table-wrap">

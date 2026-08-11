@@ -1,86 +1,78 @@
 <?php
-/**
- * Improved schema import script for Railway deployment.
- */
-
 header('Content-Type: text/plain');
 
-// Get database credentials from Railway environment variables
-$host = getenv('MYSQLHOST') ?: '127.0.0.1';
-$port = getenv('MYSQLPORT') ?: '3306';
-$dbname = getenv('MYSQLDATABASE') ?: 'railway';
-$user = getenv('MYSQLUSER') ?: 'root';
-$pass = getenv('MYSQLPASSWORD') ?: '';
+echo "=== Schema Import ===\n\n";
 
-echo "Connecting to MySQL at $host:$port as $user...\n";
+$host = getenv('MYSQLHOST');
+$port = getenv('MYSQLPORT');
+$user = getenv('MYSQLUSER');
+$pass = getenv('MYSQLPASSWORD');
+
+echo "Connecting to MySQL at $host:$port...\n";
 
 try {
-    // Connect to MySQL without selecting a database first
-    $pdo = new PDO(
-        'mysql:host=' . $host . ';port=' . $port . ';charset=utf8mb4',
-        $user,
-        $pass,
-        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-    );
+    $pdo = new PDO("mysql:host=$host;port=$port;charset=utf8mb4", $user, $pass, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    echo "Connected!\n\n";
     
-    echo "Connected successfully!\n\n";
-    
-    // Create database if it doesn't exist
     $pdo->exec("CREATE DATABASE IF NOT EXISTS paynex CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-    echo "Database 'paynex' created/verified.\n\n";
+    echo "Database 'paynex' ready.\n\n";
     
-    // Switch to the paynex database
     $pdo->exec("USE paynex");
     
-    // Check if tables already exist
     $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-    echo "Existing tables: " . implode(', ', $tables) . "\n\n";
+    if (count($tables) > 0) {
+        echo "Tables already exist (" . count($tables) . "). Skipping import.\n";
+        foreach ($tables as $t) echo "  - $t\n";
+        exit(0);
+    }
     
-    // Read and execute the schema file
     $schemaPath = __DIR__ . '/database/schema.sql';
     if (!file_exists($schemaPath)) {
-        die("Schema file not found at: $schemaPath\n");
+        die("ERROR: Schema file not found!\n");
     }
     
     $schema = file_get_contents($schemaPath);
-    echo "Schema file loaded (" . strlen($schema) . " bytes).\n\n";
+    echo "Schema loaded (" . strlen($schema) . " bytes).\n\n";
     
-    // Split by semicolons and execute each statement
-    $statements = array_filter(array_map('trim', explode(';', $schema)));
+    // Remove multi-line comments /* ... */
+    $schema = preg_replace('#/\*.*?\*/#s', '', $schema);
+    // Remove single-line comments -- ...
+    $schema = preg_replace('#--[^
+]*#', '', $schema);
+    // Remove empty lines
+    $schema = preg_replace('#\n\s*\n#', "\n", $schema);
+    
+    // Split by semicolons
+    $statements = explode(';', $schema);
     
     $count = 0;
     $errors = 0;
     foreach ($statements as $stmt) {
-        // Skip empty statements and comments
-        if (empty($stmt) || preg_match('/^--/', $stmt)) {
-            continue;
-        }
+        $stmt = trim($stmt);
+        if (empty($stmt)) continue;
         
         try {
             $pdo->exec($stmt);
             $count++;
         } catch (PDOException $e) {
-            // Only show actual errors, not duplicate table warnings
-            if (strpos($e->getMessage(), 'already exists') === false) {
-                echo "Warning: " . $e->getMessage() . "\n";
+            $msg = $e->getMessage();
+            if (strpos($msg, 'already exists') !== false || strpos($msg, 'Duplicate') !== false) {
+                $count++;
+            } else {
+                echo "ERROR: " . substr($msg, 0, 200) . "\n";
+                echo "  In: " . substr($stmt, 0, 150) . "\n\n";
                 $errors++;
             }
         }
     }
     
-    echo "\nImport complete!\n";
     echo "Statements executed: $count\n";
     echo "Errors: $errors\n\n";
     
-    // Verify tables were created
     $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
-    echo "Tables in database: " . count($tables) . "\n";
-    foreach ($tables as $table) {
-        echo "  - $table\n";
-    }
+    echo "Tables created: " . count($tables) . "\n";
+    foreach ($tables as $t) echo "  - $t\n";
     
 } catch (PDOException $e) {
-    echo "ERROR: " . $e->getMessage() . "\n";
-    echo "Stack trace:\n" . $e->getTraceAsString() . "\n";
-    exit(1);
+    echo "FATAL ERROR: " . $e->getMessage() . "\n";
 }

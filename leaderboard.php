@@ -32,11 +32,17 @@ if (!$cycle) {
 $weekStart = $cycle['week_start'];
 $weekEnd   = $cycle['week_end'];
 $prizePool = (float) $cycle['total_prize_pool'];
-$prizePerPerson = (float) $cycle['prize_per_person'];
 $nextReset = strtotime($weekEnd) + 86400;
 $secondsUntilReset = $nextReset - time();
 
-// Fetch top 10
+// Tiered prize distribution
+$prize1st = 150.00;
+$prize2nd = 100.00;
+$prize3rd = 75.00;
+$remainingPool = $prizePool - $prize1st - $prize2nd - $prize3rd;
+$prize4to20 = $remainingPool / 17;
+
+// Fetch top 20
 $stmt = $pdo->prepare(
     "SELECT u.id, u.name, u.profile_photo,
             COUNT(r.id) AS referral_count,
@@ -139,8 +145,7 @@ require __DIR__ . '/includes/header.php';
       <span class="live-badge"><span class="live-dot"></span> Live</span>
     </h1>
     <p style="max-width:500px;margin:8px auto 0;">
-      <strong>$<?= number_format($prizePool) ?></strong> in weekly prizes —
-      <strong>$<?= number_format($prizePerPerson) ?></strong> each for the top 10 referrers.
+      <strong>$<?= number_format($prizePool) ?></strong> in weekly prizes — Top 3 get <strong>$<?= number_format($prize1st) ?></strong>, <strong>$<?= number_format($prize2nd) ?></strong>, <strong>$<?= number_format($prize3rd) ?></strong>!
     </p>
   </div>
 
@@ -195,7 +200,7 @@ require __DIR__ . '/includes/header.php';
   </div>
 
   <!-- USER RANK ALERTS -->
-  <?php if ($currentUserRank && $currentUserRank > 10): ?>
+  <?php if ($currentUserRank && $currentUserRank > 20): ?>
     <div class="alert alert-info rank-alert">
       <i class="fa-solid fa-circle-info"></i>
       You're currently ranked <strong>#<?= $currentUserRank ?></strong> this week by bonus earned.
@@ -204,10 +209,10 @@ require __DIR__ . '/includes/header.php';
     </div>
   <?php endif; ?>
 
-  <?php if ($currentUserRank && $currentUserRank <= 10): ?>
+  <?php if ($currentUserRank && $currentUserRank <= 20): ?>
     <div class="alert alert-success rank-alert">
       <i class="fa-solid fa-trophy" style="color:var(--amber);"></i>
-      You're in the <strong>top 10</strong> at <strong>#<?= $currentUserRank ?></strong> by bonus earned!
+      You're in the <strong>top 20</strong> at <strong>#<?= $currentUserRank ?></strong> by bonus earned!
       Encourage your referrals to activate higher VIP tiers to boost your rank.
     </div>
   <?php endif; ?>
@@ -215,7 +220,7 @@ require __DIR__ . '/includes/header.php';
   <?php if (!$currentUserRank): ?>
     <div class="alert alert-info rank-alert">
       <i class="fa-solid fa-circle-info"></i>
-      You haven't earned any referral bonuses this week yet. Refer friends who sign up and activate a VIP plan â just signing up isn't enough!
+      You haven't earned any referral bonuses this week yet. Refer friends who sign up and activate a VIP plan — just signing up isn't enough!
       <a href="<?= BASE_URL ?>/referrals.php" class="alert-cta">Start now →</a>
     </div>
   <?php endif; ?>
@@ -241,7 +246,7 @@ require __DIR__ . '/includes/header.php';
           <span class="podium-refs"><?= (int)$e['referral_count'] ?></span> referrals
           <div class="podium-bonus">+$<?= number_format((float)$e['bonus_earned'], 2) ?> bonus</div>
         </div>
-        <div class="podium-prize">$<?= number_format($prizePerPerson) ?></div>
+        <div class="podium-prize">$<?= number_format($prize2nd) ?></div>
         <?php if ((int)$e['id'] === (int)$user['id']): ?><span class="you-tag podium-you">You</span><?php endif; ?>
       <?php endif; ?>
       <div class="podium-base base-2">
@@ -266,7 +271,7 @@ require __DIR__ . '/includes/header.php';
           <span class="podium-refs"><?= (int)$e['referral_count'] ?></span> referrals
           <div class="podium-bonus">+$<?= number_format((float)$e['bonus_earned'], 2) ?> bonus</div>
         </div>
-        <div class="podium-prize">$<?= number_format($prizePerPerson) ?></div>
+        <div class="podium-prize">$<?= number_format($prize1st) ?></div>
         <?php if ((int)$e['id'] === (int)$user['id']): ?><span class="you-tag podium-you">You</span><?php endif; ?>
       <?php endif; ?>
       <div class="podium-base base-1">
@@ -290,7 +295,7 @@ require __DIR__ . '/includes/header.php';
           <span class="podium-refs"><?= (int)$e['referral_count'] ?></span> referrals
           <div class="podium-bonus">+$<?= number_format((float)$e['bonus_earned'], 2) ?> bonus</div>
         </div>
-        <div class="podium-prize">$<?= number_format($prizePerPerson) ?></div>
+        <div class="podium-prize">$<?= number_format($prize3rd) ?></div>
         <?php if ((int)$e['id'] === (int)$user['id']): ?><span class="you-tag podium-you">You</span><?php endif; ?>
       <?php endif; ?>
       <div class="podium-base base-3">
@@ -378,8 +383,14 @@ require __DIR__ . '/includes/header.php';
                   <span class="bonus-amount">+$<?= number_format((float)$entry['bonus_earned'], 2) ?></span>
                 </td>
                 <td style="padding:14px;text-align:center;vertical-align:middle;">
-                  <?php if ($rank <= 10): ?>
-                    <span class="prize-badge">$<?= number_format($prizePerPerson) ?></span>
+                  <?php if ($rank === 1): ?>
+                    <span class="prize-badge" style="background:rgba(255,215,0,.2);color:#8a6412;">$<?= number_format($prize1st) ?></span>
+                  <?php elseif ($rank === 2): ?>
+                    <span class="prize-badge" style="background:rgba(192,192,192,.2);color:#555;">$<?= number_format($prize2nd) ?></span>
+                  <?php elseif ($rank === 3): ?>
+                    <span class="prize-badge" style="background:rgba(205,127,50,.2);color:#8a4512;">$<?= number_format($prize3rd) ?></span>
+                  <?php elseif ($rank <= 20): ?>
+                    <span class="prize-badge">$<?= number_format($prize4to20) ?></span>
                   <?php endif; ?>
                 </td>
               </tr>
@@ -389,7 +400,7 @@ require __DIR__ . '/includes/header.php';
       </div>
       <div class="table-footer-note">
         <i class="fa-solid fa-circle-info"></i>
-        Rankings are by <strong>total referral bonus earned</strong>, not just headcount. Only referred friends who <strong>activate a VIP plan</strong> count toward your score. Refer friends to higher VIP tiers (VIP 3 = $4 bonus) to climb faster! Top 10 each win <strong>$<?= number_format($prizePerPerson) ?></strong> on Monday.
+        Rankings are by <strong>total referral bonus earned</strong>, not just headcount. Only referred friends who <strong>activate a VIP plan</strong> count toward your score. Refer friends to higher VIP tiers (VIP 3 = $4 bonus) to climb faster! Top 20 each win <strong>$<?= number_format($prizePerPerson) ?></strong> on Monday.
       </div>
     <?php endif; ?>
   </div>
@@ -438,14 +449,14 @@ require __DIR__ . '/includes/header.php';
         <div class="prize-stat-label">Total weekly prize pool</div>
       </div>
       <div class="prize-stat-box">
-        <div class="prize-stat-num" style="color:var(--amber);">$<?= number_format($prizePerPerson) ?></div>
-        <div class="prize-stat-label">Prize per top 10 referrer</div>
+        <div class="prize-stat-num" style="color:var(--amber);">$<?= number_format($prize1st) ?> / $<?= number_format($prize2nd) ?> / $<?= number_format($prize3rd) ?></div>
+        <div class="prize-stat-label">Top 3 prizes</div>
       </div>
     </div>
     <ol class="how-steps">
       <li><strong>Refer friends</strong> — Share your unique referral link. Each sign-up counts.</li>
       <li><strong>Climb the ranks</strong> — The more referrals you bring this week, the higher you climb.</li>
-      <li><strong>Top 10 win</strong> — At the end of each week (Sunday), the top 20 each win $50.</li>
+      <li><strong>Top 20 win</strong> — 1st gets $<?= number_format($prize1st) ?>, 2nd gets $<?= number_format($prize2nd) ?>, 3rd gets $<?= number_format($prize3rd) ?>, remaining 17 each get ~$<?= number_format($prize4to20) ?>.</li>
       <li><strong>Automatic payout</strong> — Prizes credited to wallets on Monday morning.</li>
     </ol>
   </div>

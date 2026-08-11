@@ -10,8 +10,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['trigger_payout'])) {
     $cycle = $pdo->query("SELECT * FROM leaderboard_cycles WHERE status = 'active' LIMIT 1")->fetch();
     if (!$cycle) { flash('error', 'No active cycle found.'); redirect('/admin/leaderboard.php'); }
     $weekStart = $cycle['week_start']; $weekEnd = $cycle['week_end'];
-    $prizePerPerson = (float) $cycle['prize_per_person'];
-    $top10 = $pdo->prepare(
+    $totalPool = (float) $cycle['total_prize_pool'];
+    
+    // Tiered prize distribution
+    $prize1st = 150.00;
+    $prize2nd = 100.00;
+    $prize3rd = 75.00;
+    $remainingPool = $totalPool - $prize1st - $prize2nd - $prize3rd;
+    $prize4to20 = $remainingPool / 17;
+    
+    $top20 = $pdo->prepare(
         "SELECT u.id, COUNT(r.id) AS referral_count FROM users u
 " .
         "JOIN referrals r ON r.referrer_id = u.id AND r.bonus_paid = 1
@@ -20,10 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['trigger_payout'])) {
 " .
         "AND r.created_at < DATE_ADD(:we, INTERVAL 1 DAY)
 " .
-        "GROUP BY u.id ORDER BY referral_count DESC LIMIT 10"
+        "GROUP BY u.id ORDER BY referral_count DESC LIMIT 20"
     );
-    $top10->execute([':ws' => $weekStart . ' 00:00:00', ':we' => $weekEnd . ' 00:00:00']);
-    $winners = $top10->fetchAll();
+    $top20->execute([':ws' => $weekStart . ' 00:00:00', ':we' => $weekEnd . ' 00:00:00']);
+    $winners = $top20->fetchAll();
     try {
         $pdo->beginTransaction();
         $payStmt = $pdo->prepare("INSERT INTO leaderboard_payouts (cycle_id, user_id, rank_position, referral_count, prize_amount, paid_at) VALUES (:cid, :uid, :rk, :rc, :amt, NOW())");
@@ -31,9 +39,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['trigger_payout'])) {
         $txStmt = $pdo->prepare("INSERT INTO wallet_transactions (user_id, type, amount, description) VALUES (:uid, 'credit', :amt, :desc)");
         $rank = 1;
         foreach ($winners as $w) {
-            $payStmt->execute([':cid' => $cycle['id'], ':uid' => $w['id'], ':rk' => $rank, ':rc' => $w['referral_count'], ':amt' => $prizePerPerson]);
-            $walletStmt->execute([':amt' => $prizePerPerson, ':id' => $w['id']]);
-            $txStmt->execute([':uid' => $w['id'], ':amt' => $prizePerPerson, ':desc' => 'Weekly leaderboard prize - #' . $rank]);
+            // Determine prize based on rank
+            if ($rank === 1) $prize = $prize1st;
+            elseif ($rank === 2) $prize = $prize2nd;
+            elseif ($rank === 3) $prize = $prize3rd;
+            else $prize = $prize4to20;
+            
+            $payStmt->execute([':cid' => $cycle['id'], ':uid' => $w['id'], ':rk' => $rank, ':rc' => $w['referral_count'], ':amt' => $prize]);
+            $walletStmt->execute([':amt' => $prize, ':id' => $w['id']]);
+            $txStmt->execute([':uid' => $w['id'], ':amt' => $prize, ':desc' => 'Weekly leaderboard prize - #' . $rank]);
             $rank++;
         }
         $pdo->prepare("UPDATE leaderboard_cycles SET status = 'completed', closed_at = NOW() WHERE id = :id")->execute([':id' => $cycle['id']]);
@@ -49,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['trigger_payout'])) {
 $cycles = $pdo->query("SELECT lc.*, (SELECT COUNT(*) FROM leaderboard_payouts WHERE cycle_id = lc.id) AS winner_count, (SELECT COALESCE(SUM(prize_amount), 0) FROM leaderboard_payouts WHERE cycle_id = lc.id) AS total_paid FROM leaderboard_cycles lc ORDER BY lc.week_start DESC")->fetchAll();
 $activeCycle = null;
 foreach ($cycles as $c) { if ($c['status'] === 'active') { $activeCycle = $c; break; } }
-$pageTitle = 'Leaderboard â Admin â payNex';
+$pageTitle = 'Leaderboard — Admin — payNex';
 require __DIR__ . '/includes/admin_header.php';
 ?>
 <div class="page-head">
@@ -63,12 +77,13 @@ require __DIR__ . '/includes/admin_header.php';
     <span class="badge badge-active">ACTIVE</span>
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-top:12px;">
-    <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Week</div><div style="font-size:18px;font-weight:600;"><?= e(date('M j', strtotime($activeCycle['week_start']))) ?> â <?= e(date('M j, Y', strtotime($activeCycle['week_end']))) ?></div></div>
+    <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Week</div><div style="font-size:18px;font-weight:600;"><?= e(date('M j', strtotime($activeCycle['week_start']))) ?> — <?= e(date('M j, Y', strtotime($activeCycle['week_end']))) ?></div></div>
     <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Prize Pool</div><div style="font-size:18px;font-weight:600;">$<?= number_format((float)$activeCycle['total_prize_pool'], 2) ?></div></div>
-    <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Per Winner</div><div style="font-size:18px;font-weight:600;">$<?= number_format((float)$activeCycle['prize_per_person'], 2) ?></div></div>
+    <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Top 3 Prizes</div><div style="font-size:18px;font-weight:600;">$150 / $100 / $75</div></div>
+    <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">4th-20th Prize</div><div style="font-size:18px;font-weight:600;">$<?= number_format((1000 - 150 - 100 - 75) / 17, 2) ?> each</div></div>
     <div><div class="text-muted" style="font-size:11px;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;">Countdown</div><div style="font-size:18px;font-weight:600;" id="admin-countdown" data-seconds="<?= $secondsUntilReset ?>">--:--:--</div></div>
   </div>
-  <form method="POST" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--paper-line);" onsubmit="return confirm('Process weekly payout? This credits top 10 and starts a new cycle.')">
+  <form method="POST" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--paper-line);" onsubmit="return confirm('Process weekly payout? This credits top 20 and starts a new cycle.')">
     <?= csrf_field() ?>
     <button type="submit" name="trigger_payout" class="btn btn-primary"><i class="fa-solid fa-gift"></i> Trigger payout now</button>
   </form>
@@ -84,12 +99,12 @@ require __DIR__ . '/includes/admin_header.php';
       <tbody>
         <?php foreach ($cycles as $c): ?>
         <tr>
-          <td><i class="fa-solid fa-calendar-week"></i> <?= date('M j', strtotime($c['week_start'])) ?> â <?= date('M j', strtotime($c['week_end'])) ?></td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:13px;"><?= e($c['week_start']) ?> â <?= e($c['week_end']) ?></td>
+          <td><i class="fa-solid fa-calendar-week"></i> <?= date('M j', strtotime($c['week_start'])) ?> — <?= date('M j', strtotime($c['week_end'])) ?></td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:13px;"><?= e($c['week_start']) ?> → <?= e($c['week_end']) ?></td>
           <td><?php if ($c['status'] === 'active'): ?><span class="badge badge-active">Active</span><?php elseif ($c['status'] === 'completed'): ?><span class="badge badge-paid">Completed</span><?php else: ?><span class="badge badge-closed"><?= e(ucfirst($c['status'])) ?></span><?php endif; ?></td>
           <td><?= (int)$c['winner_count'] ?></td>
           <td style="font-family:'IBM Plex Mono',monospace;color:var(--green);">$<?= number_format((float)($c['total_paid'] ?? 0), 2) ?></td>
-          <td style="font-size:13px;color:var(--ink-soft);"><?= $c['closed_at'] ? e(date('M j, g:ia', strtotime($c['closed_at']))) : 'â' ?></td>
+          <td style="font-size:13px;color:var(--ink-soft);"><?= $c['closed_at'] ? e(date('M j, g:ia', strtotime($c['closed_at']))) : '—' ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

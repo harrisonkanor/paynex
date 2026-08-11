@@ -55,16 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                  WHERE id = :uid'
             )->execute([':lv' => $order['vip_level'], ':exp' => $expiry, ':uid' => $order['user_id']]);
 
-            // 2. Credit the deposit amount to the user's wallet
-            //    (so their deposit money is tracked as a credit balance)
-            $pdo->prepare(
-                'UPDATE users SET wallet_balance = wallet_balance + :amt WHERE id = :uid'
-            )->execute([':amt' => $order['deposit_amount'], ':uid' => $order['user_id']]);
-
-            // 3. Record wallet transaction
+            // 2. Record deposit as a transaction (but do NOT add to wallet_balance)
+            //    Deposits are for VIP activation only, not available balance
             $pdo->prepare(
                 'INSERT INTO wallet_transactions (user_id, type, amount, description)
-                 VALUES (:uid, "credit", :amt, :desc)'
+                 VALUES (:uid, "deposit", :amt, :desc)'
             )->execute([
                 ':uid'  => $order['user_id'],
                 ':amt'  => $order['deposit_amount'],

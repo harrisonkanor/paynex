@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS users (
     referral_code       VARCHAR(16)     NOT NULL UNIQUE,
     referred_by         INT UNSIGNED    NULL,
     profile_photo       VARCHAR(255)    NULL,
+    email_verified      TINYINT(1)      NOT NULL DEFAULT 0,
+    verification_code   VARCHAR(6)      NULL,
+    total_referrals     INT UNSIGNED    NOT NULL DEFAULT 0,
     created_at          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_referred_by FOREIGN KEY (referred_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -139,6 +142,7 @@ CREATE TABLE IF NOT EXISTS task_submissions (
     user_id         INT UNSIGNED    NOT NULL,
     proof_text      TEXT            NOT NULL,
     spin_result     VARCHAR(100)    NULL,
+    screenshot_path VARCHAR(255)    NULL,
     status          ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
     submitted_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     reviewed_at     DATETIME        NULL,

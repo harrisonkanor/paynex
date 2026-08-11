@@ -23,7 +23,8 @@ $tcStmt = $pdo->prepare("SELECT COUNT(*) FROM task_submissions WHERE user_id = :
 $tcStmt->execute([':id' => $user['id']]);
 $tasksCompleted = (int) $tcStmt->fetchColumn();
 
-$lifetimeStmt = $pdo->prepare("SELECT COALESCE(SUM(amount), 0) FROM wallet_transactions WHERE user_id = :id AND type = 'credit'");
+// Calculate lifetime earned from task submissions only (not deposits)
+$lifetimeStmt = $pdo->prepare("SELECT COALESCE(SUM(t.reward), 0) FROM task_submissions ts JOIN tasks t ON t.id = ts.task_id WHERE ts.user_id = :id AND ts.status = 'approved'");
 $lifetimeStmt->execute([':id' => $user['id']]);
 $lifetimeEarned = (float) $lifetimeStmt->fetchColumn();
 

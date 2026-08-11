@@ -14,8 +14,17 @@ if (!$cycle) {
 }
 $weekEnd = $cycle['week_end']; $now = date('Y-m-d');
 if ($now <= $weekEnd) { echo "Still active until {$weekEnd}. No action.\n"; exit(0); }
-$weekStart = $cycle['week_start']; $prizePerPerson = 50.00; // $50 per winner
+$weekStart = $cycle['week_start'];
+
+// Tiered prize distribution
+$prize1st = 150.00;
+$prize2nd = 100.00;
+$prize3rd = 75.00;
+$remainingPool = 1000.00 - $prize1st - $prize2nd - $prize3rd;
+$prize4to20 = $remainingPool / 17;
+
 echo "Paying out cycle {$cycle['id']} ({$weekStart} to {$weekEnd})...\n";
+echo "Prizes: 1st=$" . number_format($prize1st, 2) . ", 2nd=$" . number_format($prize2nd, 2) . ", 3rd=$" . number_format($prize3rd, 2) . ", 4th-20th=$" . number_format($prize4to20, 2) . " each\n";
 // Top 20 winners
 $top20 = $pdo->prepare("SELECT u.id, COUNT(r.id) AS referral_count FROM users u JOIN referrals r ON r.referrer_id = u.id AND r.bonus_paid = 1 WHERE u.role = 'earner' AND r.created_at >= :ws AND r.created_at < DATE_ADD(:we, INTERVAL 1 DAY) GROUP BY u.id ORDER BY referral_count DESC LIMIT 20");
 $top20->execute([':ws' => $weekStart . ' 00:00:00', ':we' => $weekEnd . ' 00:00:00']);
@@ -27,12 +36,20 @@ try {
     $walletStmt = $pdo->prepare("UPDATE users SET wallet_balance = wallet_balance + :amt WHERE id = :id");
     $txStmt = $pdo->prepare("INSERT INTO wallet_transactions (user_id, type, amount, description) VALUES (:uid, 'credit', :amt, :desc)");
     $rank = 1;
+    $totalPaid = 0;
     foreach ($winners as $w) {
-        $payStmt->execute([':cid' => $cycle['id'], ':uid' => $w['id'], ':rk' => $rank, ':rc' => $w['referral_count'], ':amt' => $prizePerPerson]);
-        $walletStmt->execute([':amt' => $prizePerPerson, ':id' => $w['id']]);
+        // Determine prize based on rank
+        if ($rank === 1) $prize = $prize1st;
+        elseif ($rank === 2) $prize = $prize2nd;
+        elseif ($rank === 3) $prize = $prize3rd;
+        else $prize = $prize4to20;
+        
+        $payStmt->execute([':cid' => $cycle['id'], ':uid' => $w['id'], ':rk' => $rank, ':rc' => $w['referral_count'], ':amt' => $prize]);
+        $walletStmt->execute([':amt' => $prize, ':id' => $w['id']]);
         $desc = 'Weekly leaderboard prize - #' . $rank;
-        $txStmt->execute([':uid' => $w['id'], ':amt' => $prizePerPerson, ':desc' => $desc]);
-        echo "  #{$rank}: User {$w['id']} - " . (int)$w['referral_count'] . " refs, +$" . number_format($prizePerPerson, 2) . "\n";
+        $txStmt->execute([':uid' => $w['id'], ':amt' => $prize, ':desc' => $desc]);
+        echo "  #{$rank}: User {$w['id']} - " . (int)$w['referral_count'] . " refs, +$" . number_format($prize, 2) . "\n";
+        $totalPaid += $prize;
         $rank++;
     }
     $pdo->prepare("UPDATE leaderboard_cycles SET status = 'completed', closed_at = NOW() WHERE id = :id")->execute([':id' => $cycle['id']]);
@@ -75,7 +92,6 @@ try {
         echo "Could not seed leaderboard: " . $e->getMessage() . "\n";
     }
     $pdo->commit();
-    $total = $prizePerPerson * count($winners);
-    echo "Payout complete! Total: $" . number_format($total, 2) . "\n";
+    echo "Payout complete! Total: $" . number_format($totalPaid, 2) . "\n";
 } catch (Exception $e) { $pdo->rollBack(); echo "ERROR: " . $e->getMessage() . "\n"; exit(1); }
 echo "[" . date('Y-m-d H:i:s') . "] Done.\n";

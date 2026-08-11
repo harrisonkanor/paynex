@@ -19,8 +19,7 @@ try {
     // 2. Update all referrals for VIP 3 referrers
     echo "2. Updating VIP 3 referrals...\n";
     $pdo->exec("UPDATE referrals r JOIN users u ON u.id = r.referrer_id SET r.bonus_amount = 4.00 WHERE u.vip_level = 3");
-    $affected = $pdo->rowCount();
-    echo "   Updated " . $affected . " referrals\n\n";
+    echo "   Updated VIP 3 referrals\n\n";
     
     // 3. Update user balances for VIP 3 users
     echo "3. Updating VIP 3 user balances...\n";

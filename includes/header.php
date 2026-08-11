@@ -1,10 +1,10 @@
 <?php
 /**
- * Shared page header - HTML <head>, Flash messages, responsive nav with
+ * Shared page header — HTML <head>, Flash messages, responsive nav with
  * hamburger menu, and Font Awesome icons.
  *
  * Variables used (set in the calling page before include):
- *   $pageTitle - string, optional
+ *   $pageTitle — string, optional
  */
 if (!isset($pdo)) {
     require_once __DIR__ . '/../config/config.php';
@@ -13,16 +13,6 @@ require_once __DIR__ . '/security_headers.php';
 $user = current_user();
 ?>
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title><?= e($pageTitle ?? 'PayNex - Turn Small Tasks Into Real Earnings') ?></title>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title><?= e(\$pageTitle ?? 'PayNex - Turn Small Tasks Into Real Earnings') ?></title>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
